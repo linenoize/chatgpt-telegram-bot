@@ -132,15 +132,15 @@ PLUGIN_DESCRIPTIONS = {
         ]
     },
     "WebShot": {
-        "description": "Takes screenshots of websites. Use when someone wants to see what a website looks like without visiting it.",
+        "description": "Takes screenshots of websites. Use only when someone specifically wants to see the visual appearance of a website without visiting it.",
         "examples": [
             "Take a screenshot of google.com",
             "Show me what cnn.com looks like",
             "Capture a screenshot of twitter.com",
-            "Get a screenshot of reddit.com",
-            "Show me a preview of nytimes.com"
+            "Get a visual of how reddit.com appears",
+            "Show me a visual preview of nytimes.com"
         ]
-    },
+    }, 
     "IP.FM": {
         "description": "Provides geolocation and network information for IP addresses.",
         "examples": [
@@ -165,7 +165,17 @@ PLUGIN_DESCRIPTIONS = {
             "Help me format this content as a professional email",
             "Generate a creative story from my notes using a pattern"
         ]
-    }
+    },
+    "URL Summarizer": {
+        "description": "Fetches and analyzes the content of a webpage, providing a concise summary of the main points and key information.",
+        "examples": [
+            "Summarize this webpage: https://example.com",
+            "Can you give me a summary of what's on nytimes.com/technology",
+            "Read and summarize the content from this URL",
+            "What are the main points on this website?",
+            "Extract the key information from this blog post URL"
+        ]
+    },
 }
 
 # Pattern-specific descriptions

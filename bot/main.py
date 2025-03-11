@@ -109,7 +109,7 @@ def main():
         'wolfram', 'weather', 'crypto', 'ddg_web_search', 'ddg_image_search',
         'spotify', 'worldtimeapi', 'youtube_audio_extractor', 'dice',
         'deepl_translate', 'gtts_text_to_speech', 'auto_tts', 'whois',
-        'webshot', 'iplocation'
+        'webshot', 'iplocation', 'pattern', 'url_summarize'
     ]
 
     plugin_config = {

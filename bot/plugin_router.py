@@ -75,6 +75,26 @@ class PluginRouter:
         - function_name: The name of the function to call (or None if no suitable function found)
         - parameters: Parameters to pass to the function
         """
+
+        url_summarize_patterns = [
+            r"summarize .*https?://",
+            r"summarize .*\.(com|org|net|io|edu)",
+            r"summary of .*\.(com|org|net|io|edu)",
+            r"read .*website",
+            r"extract .* from .*website",
+            r"extract .* from .*url",
+            r"what does .* website say",
+            r"what's on .*\.(com|org|net|io|edu)"
+        ]
+
+        # Check if the query matches URL summarization patterns
+        if any(re.search(pattern, query.lower()) for pattern in url_summarize_patterns):
+            # Attempt to extract URL from the query
+            url_match = re.search(r'https?://[^\s]+|[a-zA-Z0-9-]+\.[a-zA-Z0-9-]+\.[a-zA-Z0-9-]+|[a-zA-Z0-9-]+\.[a-zA-Z0-9-]+', query)
+            if url_match:
+                logging.info(f"URL summarize pattern matched, using URL: {url_match.group(0)}")
+                return "summarize_webpage", {"url": url_match.group(0)}
+
         enhanced_descriptions = {}
         
         # Create an enhanced description object with more context and examples

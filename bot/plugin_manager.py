@@ -18,6 +18,7 @@ from plugins.whois_ import WhoisPlugin
 from plugins.webshot import WebshotPlugin
 from plugins.iplocation import IpLocationPlugin
 from plugins.pattern_plugin import PatternPlugin
+from plugins.url_summarize import URLSummarizePlugin
 
 
 class PluginManager:
@@ -53,6 +54,7 @@ class PluginManager:
             'webshot': WebshotPlugin,
             'iplocation': IpLocationPlugin,
             'pattern': PatternPlugin,
+            'url_summarize': URLSummarizePlugin,
         }
         
         self.plugins = []
