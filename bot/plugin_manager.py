@@ -1,4 +1,6 @@
 import json
+import logging
+import os
 
 from plugins.gtts_text_to_speech import GTTSTextToSpeech
 from plugins.auto_tts import AutoTextToSpeech
@@ -15,6 +17,7 @@ from plugins.worldtimeapi import WorldTimeApiPlugin
 from plugins.whois_ import WhoisPlugin
 from plugins.webshot import WebshotPlugin
 from plugins.iplocation import IpLocationPlugin
+from plugins.pattern_plugin import PatternPlugin
 
 
 class PluginManager:
@@ -24,6 +27,15 @@ class PluginManager:
 
     def __init__(self, config):
         enabled_plugins = config.get('plugins', [])
+        # Default to enabling all plugins if none are specified
+        if not any(enabled_plugins):
+            enabled_plugins = [
+                'wolfram', 'weather', 'crypto', 'ddg_web_search', 'ddg_image_search',
+                'spotify', 'worldtimeapi', 'youtube_audio_extractor', 'dice',
+                'deepl_translate', 'gtts_text_to_speech', 'auto_tts', 'whois',
+                'webshot', 'iplocation', 'pattern'
+            ]
+        
         plugin_mapping = {
             'wolfram': WolframAlphaPlugin,
             'weather': WeatherPlugin,
@@ -40,8 +52,24 @@ class PluginManager:
             'whois': WhoisPlugin,
             'webshot': WebshotPlugin,
             'iplocation': IpLocationPlugin,
+            'pattern': PatternPlugin,
         }
-        self.plugins = [plugin_mapping[plugin]() for plugin in enabled_plugins if plugin in plugin_mapping]
+        
+        self.plugins = []
+        
+        # Try to initialize each plugin and log any errors
+        for plugin_name in enabled_plugins:
+            if plugin_name in plugin_mapping:
+                try:
+                    plugin_instance = plugin_mapping[plugin_name]()
+                    self.plugins.append(plugin_instance)
+                    logging.info(f"Successfully loaded plugin: {plugin_name}")
+                except Exception as e:
+                    logging.error(f"Failed to load plugin {plugin_name}: {str(e)}")
+            elif plugin_name:  # Only log if the plugin name is not empty
+                logging.warning(f"Unknown plugin: {plugin_name}")
+                
+        logging.info(f"Enabled plugins: {', '.join([p.__class__.__name__ for p in self.plugins])}")
 
     def get_functions_specs(self):
         """
@@ -53,7 +81,7 @@ class PluginManager:
         """
         Call a function based on the name and parameters provided
         """
-        plugin = self.__get_plugin_by_function_name(function_name)
+        plugin = self.get_plugin_by_function_name(function_name)
         if not plugin:
             return json.dumps({'error': f'Function {function_name} not found'})
         return json.dumps(await plugin.execute(function_name, helper, **json.loads(arguments)), default=str)
@@ -62,11 +90,15 @@ class PluginManager:
         """
         Return the source name of the plugin
         """
-        plugin = self.__get_plugin_by_function_name(function_name)
+        plugin = self.get_plugin_by_function_name(function_name)
         if not plugin:
             return ''
         return plugin.get_source_name()
-
-    def __get_plugin_by_function_name(self, function_name):
+    
+    def get_plugin_by_function_name(self, function_name):
+        """
+        Return the plugin instance by function name
+        This method is made public to be used by the PluginRouter
+        """
         return next((plugin for plugin in self.plugins
                     if function_name in map(lambda spec: spec.get('name'), plugin.get_spec())), None)

@@ -129,6 +129,64 @@ class OpenAIHelper:
         :return: The answer from the model and the number of tokens used
         """
         plugins_used = ()
+        
+        # First try natural language plugin routing if enabled
+        if self.config.get('enable_natural_language_plugin_routing', False) and self.config['enable_functions'] and not self.conversations_vision[chat_id]:
+            try:
+                # Import here to avoid circular imports
+                from plugin_router import PluginRouter
+                
+                if not hasattr(self, 'plugin_router'):
+                    self.plugin_router = PluginRouter(self, self.plugin_manager)
+                    
+                # Check if the query seems like it might be directed at a plugin
+                plugin_patterns = [
+                    r"search for", r"look up", r"find", r"weather", r"temperature", 
+                    r"translate", r"convert", r"calculate", r"solve", r"crypto", 
+                    r"price of", r"image of", r"picture of", r"screenshot", r"whois",
+                    r"who is", r"what time", r"roll dice", r"roll a dice", r"spotify", 
+                    r"music", r"song", r"artist", r"youtube", r"transcribe", r"wolfram",
+                    r"where is", r"IP address", r"domain", r"where", r"when", r"how much", 
+                    r"how many", r"show me", r"current", r"latest", r"forecast"
+                ]
+                
+                potential_plugin_query = any(re.search(pattern, query.lower()) for pattern in plugin_patterns)
+                
+                if potential_plugin_query:
+                    result = await self.plugin_router.route_and_execute(chat_id, query)
+                    
+                    if is_direct_result(result):
+                        return result, '0'
+                    
+                    if "result" in result:
+                        plugin_name = self.plugin_manager.get_plugin_source_name(self.plugin_router.last_function_name) if hasattr(self.plugin_router, 'last_function_name') and self.plugin_router.last_function_name else "Plugin"
+                        plugins_used = (self.plugin_router.last_function_name,) if hasattr(self.plugin_router, 'last_function_name') and self.plugin_router.last_function_name else ()
+                        
+                        if isinstance(result["result"], list):
+                            # Format search results nicely
+                            formatted_result = "Here's what I found:\n\n"
+                            for idx, item in enumerate(result["result"], 1):
+                                if isinstance(item, dict):
+                                    if "title" in item and "snippet" in item:
+                                        formatted_result += f"{idx}. **{item['title']}**\n{item['snippet']}\n"
+                                        if "link" in item:
+                                            formatted_result += f"[Link]({item['link']})\n\n"
+                                    else:
+                                        formatted_result += f"{idx}. {json.dumps(item, indent=2)}\n\n"
+                                else:
+                                    formatted_result += f"{idx}. {item}\n\n"
+                            
+                            self.__add_to_history(chat_id, role="assistant", content=formatted_result)
+                            return formatted_result, '0'
+                        else:
+                            # Return the result directly
+                            formatted_result = f"I used {plugin_name} to get this information:\n\n{result['result']}"
+                            self.__add_to_history(chat_id, role="assistant", content=formatted_result)
+                            return formatted_result, '0'
+            except Exception as e:
+                logging.warning(f"Error in natural language plugin routing: {str(e)}")
+                # Continue with normal response generation
+        
         response = await self.__common_get_chat_response(chat_id, query)
         if self.config['enable_functions'] and not self.conversations_vision[chat_id]:
             response, plugins_used = await self.__handle_function_call(chat_id, response)
@@ -154,9 +212,9 @@ class OpenAIHelper:
         plugin_names = tuple(self.plugin_manager.get_plugin_source_name(plugin) for plugin in plugins_used)
         if self.config['show_usage']:
             answer += "\n\n---\n" \
-                      f"💰 {str(response.usage.total_tokens)} {localized_text('stats_tokens', bot_language)}" \
-                      f" ({str(response.usage.prompt_tokens)} {localized_text('prompt', bot_language)}," \
-                      f" {str(response.usage.completion_tokens)} {localized_text('completion', bot_language)})"
+                        f"💰 {str(response.usage.total_tokens)} {localized_text('stats_tokens', bot_language)}" \
+                        f" ({str(response.usage.prompt_tokens)} {localized_text('prompt', bot_language)}," \
+                        f" {str(response.usage.completion_tokens)} {localized_text('completion', bot_language)})"
             if show_plugins_used:
                 answer += f"\n🔌 {', '.join(plugin_names)}"
         elif show_plugins_used:

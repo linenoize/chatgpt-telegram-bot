@@ -60,6 +60,9 @@ def main():
         'vision_max_tokens': int(os.environ.get('VISION_MAX_TOKENS', '300')),
         'tts_model': os.environ.get('TTS_MODEL', 'tts-1'),
         'tts_voice': os.environ.get('TTS_VOICE', 'alloy'),
+        'enable_functions': os.environ.get('ENABLE_FUNCTIONS', str(functions_available)).lower() == 'true',
+        'enable_natural_language_plugin_routing': os.environ.get('ENABLE_NATURAL_LANGUAGE_PLUGIN_ROUTING', 'true').lower() == 'true',
+        'functions_max_consecutive_calls': int(os.environ.get('FUNCTIONS_MAX_CONSECUTIVE_CALLS', 10)),
     }
 
     if openai_config['enable_functions'] and not functions_available:
@@ -102,8 +105,15 @@ def main():
         'bot_language': os.environ.get('BOT_LANGUAGE', 'en'),
     }
 
+    all_available_plugins = [
+        'wolfram', 'weather', 'crypto', 'ddg_web_search', 'ddg_image_search',
+        'spotify', 'worldtimeapi', 'youtube_audio_extractor', 'dice',
+        'deepl_translate', 'gtts_text_to_speech', 'auto_tts', 'whois',
+        'webshot', 'iplocation'
+    ]
+
     plugin_config = {
-        'plugins': os.environ.get('PLUGINS', '').split(',')
+        'plugins': os.environ.get('PLUGINS', ','.join(all_available_plugins)).split(',')
     }
 
     # Setup and run ChatGPT and Telegram bot
