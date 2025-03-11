@@ -1,3 +1,5 @@
+# Improved PatternPlugin that reads pattern_explanations.md
+
 import os
 import logging
 import json
@@ -11,23 +13,57 @@ class PatternPlugin(Plugin):
     A plugin to execute Fabric patterns stored in the bot/patterns directory.
     """
     def __init__(self):
-        self.patterns_dir = os.path.join(os.path.dirname(__file__), 'patterns')
+        self.patterns_dir = os.path.join(os.path.dirname(__file__), '..', 'patterns')
         # Create patterns directory if it doesn't exist
         os.makedirs(self.patterns_dir, exist_ok=True)
-        # Load pattern descriptions if available
-        self.pattern_descriptions = self._load_pattern_descriptions()
+        # Load pattern explanations file
+        self.pattern_explanations = self._load_pattern_explanations()
         
-    def _load_pattern_descriptions(self) -> Dict:
-        """Load pattern descriptions from the pattern_descriptions.json file if available"""
+    def _load_pattern_explanations(self) -> Dict:
+        """
+        Load pattern explanations from pattern_explanations.md
+        """
         try:
-            descriptions_path = os.path.join(os.path.dirname(__file__), 'pattern_descriptions.json')
-            if os.path.exists(descriptions_path):
-                with open(descriptions_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            return {"patterns": []}
+            explanations_path = os.path.join(self.patterns_dir, 'pattern_explanations.md')
+            if os.path.exists(explanations_path):
+                with open(explanations_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # Parse the content
+                pattern_dict = {}
+                
+                # Skip the first few lines (header)
+                lines = content.strip().split('\n')
+                
+                # Find the key pattern line and store it specially
+                key_pattern_line = next((line for line in lines if "Key pattern to use" in line), None)
+                if key_pattern_line:
+                    pattern_dict["key_pattern"] = key_pattern_line.strip()
+                
+                # Parse the numbered pattern descriptions
+                current_pattern = None
+                for line in lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                        
+                    # Match lines like "1. **pattern_name**: Description text"
+                    import re
+                    pattern_match = re.match(r'^\d+\.\s+\*\*([^*]+)\*\*:\s+(.+)$', line)
+                    if pattern_match:
+                        pattern_name = pattern_match.group(1)
+                        description = pattern_match.group(2)
+                        pattern_dict[pattern_name] = {
+                            "description": description
+                        }
+                
+                return pattern_dict
+            else:
+                logging.warning(f"Pattern explanations file not found at {explanations_path}")
+                return {}
         except Exception as e:
-            logging.warning(f"Failed to load pattern descriptions: {str(e)}")
-            return {"patterns": []}
+            logging.warning(f"Failed to load pattern explanations: {str(e)}")
+            return {}
     
     def get_available_patterns(self) -> List[str]:
         """Get a list of available pattern names"""
@@ -41,17 +77,9 @@ class PatternPlugin(Plugin):
     
     def get_pattern_description(self, pattern_name: str) -> str:
         """Get the description for a pattern"""
-        for pattern in self.pattern_descriptions.get("patterns", []):
-            if pattern.get("patternName") == pattern_name:
-                return pattern.get("description", "No description available")
+        if pattern_name in self.pattern_explanations:
+            return self.pattern_explanations[pattern_name].get("description", "No description available")
         return "No description available"
-    
-    def get_pattern_tags(self, pattern_name: str) -> List[str]:
-        """Get the tags for a pattern"""
-        for pattern in self.pattern_descriptions.get("patterns", []):
-            if pattern.get("patternName") == pattern_name:
-                return pattern.get("tags", [])
-        return []
     
     def get_pattern_content(self, pattern_name: str) -> str:
         """Read the content of a pattern's system.md file"""
@@ -105,8 +133,8 @@ class PatternPlugin(Plugin):
         
         # Add a function for finding the right pattern
         specs.append({
-            "name": "find_pattern",
-            "description": "Find the most appropriate pattern for a specific task or problem",
+            "name": "suggest_pattern",
+            "description": "Suggests appropriate fabric patterns or commands based on user input, providing clear explanations and options for users.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -126,18 +154,11 @@ class PatternPlugin(Plugin):
             category = kwargs.get("category", "").upper()
             patterns = self.get_available_patterns()
             
-            # Filter by category if provided
-            if category:
-                patterns = [p for p in patterns if any(tag.upper() == category for tag in self.get_pattern_tags(p))]
-            
             # Format the results
             result = "Available Patterns:\n\n"
             for pattern in patterns:
                 description = self.get_pattern_description(pattern)
-                tags = self.get_pattern_tags(pattern)
                 result += f"- **{pattern}**: {description}\n"
-                if tags:
-                    result += f"  Tags: {', '.join(tags)}\n"
             
             return {"result": result}
         
@@ -157,12 +178,12 @@ class PatternPlugin(Plugin):
             formatted_prompt = f"{pattern_content}\n\n# INPUT:\n\nINPUT: {input_text}"
             
             # Get a response from the OpenAI API
-            response, _ = await helper.get_chat_response(chat_id=chat_id, query=formatted_prompt)
+            response, _ = await helper.get_chat_response(chat_id=kwargs.get('chat_id', 0), query=formatted_prompt)
             
             # Return the result
             return {"result": f"**Pattern '{pattern_name}' Result:**\n\n{response}"}
         
-        elif function_name == "find_pattern":
+        elif function_name == "suggest_pattern":
             task_description = kwargs.get("task_description")
             if not task_description:
                 return {"result": "Task description is required"}
@@ -172,12 +193,15 @@ class PatternPlugin(Plugin):
             pattern_info = []
             for pattern in patterns:
                 description = self.get_pattern_description(pattern)
-                tags = self.get_pattern_tags(pattern)
                 pattern_info.append({
                     "name": pattern,
-                    "description": description,
-                    "tags": tags
+                    "description": description
                 })
+            
+            # Add the key pattern message from the explanations file
+            key_pattern_msg = ""
+            if "key_pattern" in self.pattern_explanations:
+                key_pattern_msg = f"\n\n{self.pattern_explanations['key_pattern']}"
             
             # Create a prompt to find the best pattern
             prompt = f"""
@@ -188,12 +212,13 @@ class PatternPlugin(Plugin):
             Here are the available patterns and their descriptions:
             
             {json.dumps(pattern_info, indent=2)}
+            {key_pattern_msg}
             
-            Please suggest the best pattern for this task, explain why it's appropriate, and how to use it.
+            Please suggest the best pattern for this task, explain why it's appropriate, and ask for my confirmation before proceeding. Also explain what the pattern does so I can understand its purpose.
             """
             
             # Get a response from the OpenAI API
-            response, _ = await helper.get_chat_response(chat_id=chat_id, query=prompt)
+            response, _ = await helper.get_chat_response(chat_id=kwargs.get('chat_id', 0), query=prompt)
             
             # Return the suggestion
             return {"result": response}
