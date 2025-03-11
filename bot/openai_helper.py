@@ -131,7 +131,7 @@ class OpenAIHelper:
         plugins_used = ()
         
         # First try natural language plugin routing if enabled
-        if self.config.get('enable_natural_language_plugin_routing', False) and self.config['enable_functions'] and not self.conversations_vision[chat_id]:
+        if self.config.get('enable_natural_language_plugin_routing', False) and self.config['enable_functions'] and not self.conversations_vision.get(chat_id, False):
             try:
                 # Import here to avoid circular imports
                 from plugin_router import PluginRouter
