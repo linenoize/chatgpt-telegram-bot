@@ -60,6 +60,35 @@ class ChatGPTTelegramBot:
         self.last_message = {}
         self.inline_queries_cache = {}
 
+    async def send_processing_message(self, update: Update, function_name: str = None) -> Message:
+        """
+        Sends an initial message indicating that the request is being processed.
+        
+        :param update: The update object
+        :param function_name: Optional name of the function being called
+        :return: The sent message object
+        """
+        bot_language = self.config['bot_language']
+        
+        # Determine appropriate processing message based on function or default to generic
+        if function_name == "image":
+            message = localized_text('processing_image', bot_language)
+        elif function_name == "tts":
+            message = localized_text('processing_tts', bot_language)
+        elif function_name == "vision":
+            message = localized_text('processing_vision', bot_language)
+        elif function_name == "transcribe":
+            message = localized_text('processing_transcription', bot_language)
+        else:
+            message = localized_text('processing_request', bot_language)
+        
+        # Send the processing message
+        return await update.effective_message.reply_text(
+            message_thread_id=get_thread_id(update),
+            reply_to_message_id=get_reply_to_message_id(self.config, update),
+            text=message
+        )
+
     async def help(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
         """
         Shows the help menu.
@@ -250,11 +279,22 @@ class ChatGPTTelegramBot:
             return
 
         logging.info(f'New image generation request received from user {update.message.from_user.name} '
-                     f'(id: {update.message.from_user.id})')
+                    f'(id: {update.message.from_user.id})')
+
+        # Send initial processing message
+        processing_message = await self.send_processing_message(update, "image")
 
         async def _generate():
             try:
                 image_url, image_size = await self.openai.generate_image(prompt=image_query)
+                
+                # Delete the processing message
+                try:
+                    await context.bot.delete_message(chat_id=processing_message.chat_id,
+                                                message_id=processing_message.message_id)
+                except Exception as e:
+                    logging.warning(f"Failed to delete processing message: {str(e)}")
+                    
                 if self.config['image_receive_mode'] == 'photo':
                     await update.effective_message.reply_photo(
                         reply_to_message_id=get_reply_to_message_id(self.config, update),
@@ -275,6 +315,13 @@ class ChatGPTTelegramBot:
                     self.usage["guests"].add_image_request(image_size, self.config['image_prices'])
 
             except Exception as e:
+                # Delete the processing message even on error
+                try:
+                    await context.bot.delete_message(chat_id=processing_message.chat_id,
+                                                message_id=processing_message.message_id)
+                except Exception as delete_err:
+                    logging.warning(f"Failed to delete processing message: {str(delete_err)}")
+                    
                 logging.exception(e)
                 await update.effective_message.reply_text(
                     message_thread_id=get_thread_id(update),
@@ -302,11 +349,21 @@ class ChatGPTTelegramBot:
             return
 
         logging.info(f'New speech generation request received from user {update.message.from_user.name} '
-                     f'(id: {update.message.from_user.id})')
+                    f'(id: {update.message.from_user.id})')
+
+        # Send initial processing message
+        processing_message = await self.send_processing_message(update, "tts")
 
         async def _generate():
             try:
                 speech_file, text_length = await self.openai.generate_speech(text=tts_query)
+
+                # Delete the processing message
+                try:
+                    await context.bot.delete_message(chat_id=processing_message.chat_id,
+                                                message_id=processing_message.message_id)
+                except Exception as e:
+                    logging.warning(f"Failed to delete processing message: {str(e)}")
 
                 await update.effective_message.reply_voice(
                     reply_to_message_id=get_reply_to_message_id(self.config, update),
@@ -321,6 +378,13 @@ class ChatGPTTelegramBot:
                     self.usage["guests"].add_tts_request(text_length, self.config['tts_model'], self.config['tts_prices'])
 
             except Exception as e:
+                # Delete the processing message even on error
+                try:
+                    await context.bot.delete_message(chat_id=processing_message.chat_id,
+                                                message_id=processing_message.message_id)
+                except Exception as delete_err:
+                    logging.warning(f"Failed to delete processing message: {str(delete_err)}")
+                    
                 logging.exception(e)
                 await update.effective_message.reply_text(
                     message_thread_id=get_thread_id(update),
@@ -344,6 +408,9 @@ class ChatGPTTelegramBot:
 
         chat_id = update.effective_chat.id
         filename = update.message.effective_attachment.file_unique_id
+        
+        # Send initial processing message
+        processing_message = await self.send_processing_message(update, "transcribe")
 
         async def _execute():
             filename_mp3 = f'{filename}.mp3'
@@ -380,6 +447,13 @@ class ChatGPTTelegramBot:
                 if os.path.exists(filename):
                     os.remove(filename)
                 return
+            
+            # At the appropriate point, delete the processing message:
+            try:
+                await context.bot.delete_message(chat_id=processing_message.chat_id,
+                                            message_id=processing_message.message_id)
+            except Exception as e:
+                logging.warning(f"Failed to delete processing message: {str(e)}")
 
             user_id = update.message.from_user.id
             if user_id not in self.usage:
@@ -468,12 +542,14 @@ class ChatGPTTelegramBot:
             else:
                 trigger_keyword = self.config['group_trigger_keyword']
                 if (prompt is None and trigger_keyword != '') or \
-                   (prompt is not None and not prompt.lower().startswith(trigger_keyword.lower())):
+                (prompt is not None and not prompt.lower().startswith(trigger_keyword.lower())):
                     logging.info('Vision coming from group chat with wrong keyword, ignoring...')
                     return
         
         image = update.message.effective_attachment[-1]
         
+        # Send initial processing message
+        processing_message = await self.send_processing_message(update, "vision")
 
         async def _execute():
             bot_language = self.config['bot_language']
@@ -481,6 +557,13 @@ class ChatGPTTelegramBot:
                 media_file = await context.bot.get_file(image.file_id)
                 temp_file = io.BytesIO(await media_file.download_as_bytearray())
             except Exception as e:
+                # Delete the processing message
+                try:
+                    await context.bot.delete_message(chat_id=processing_message.chat_id,
+                                                message_id=processing_message.message_id)
+                except Exception as e:
+                    logging.warning(f"Failed to delete processing message: {str(e)}")
+                    
                 logging.exception(e)
                 await update.effective_message.reply_text(
                     message_thread_id=get_thread_id(update),
@@ -679,6 +762,8 @@ class ChatGPTTelegramBot:
                     return
 
         try:
+            # Send initial processing message
+            processing_message = await self.send_processing_message(update)
             total_tokens = 0
 
             if self.config['stream']:
@@ -693,6 +778,13 @@ class ChatGPTTelegramBot:
                 sent_message = None
                 backoff = 0
                 stream_chunk = 0
+
+                # Delete the processing message once we start getting responses
+                try:
+                    await context.bot.delete_message(chat_id=processing_message.chat_id,
+                                                message_id=processing_message.message_id)
+                except Exception as e:
+                    logging.warning(f"Failed to delete processing message: {str(e)}")
 
                 async for content, tokens in stream_response:
                     if is_direct_result(content):

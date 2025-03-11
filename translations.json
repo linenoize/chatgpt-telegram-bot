@@ -46,7 +46,12 @@
         "answer_with_chatgpt":"Answer with ChatGPT",
         "ask_chatgpt":"Ask ChatGPT",
         "loading":"Loading...",
-        "function_unavailable_in_inline_mode": "This function is unavailable in inline mode"
+        "function_unavailable_in_inline_mode": "This function is unavailable in inline mode",
+        "processing_request": "I'm processing your request. This may take a moment...",
+        "processing_image": "I'm generating an image based on your description. This may take up to 30 seconds...",
+        "processing_tts": "I'm converting your text to speech. This may take a moment...",
+        "processing_vision": "I'm analyzing the image. This may take a moment...",
+        "processing_transcription": "I'm transcribing your audio. This may take a moment based on the length of the recording..."
     },
     "ar": {
         "help_description":"عرض رسالة المساعدة",
